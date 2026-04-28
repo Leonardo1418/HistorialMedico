@@ -341,6 +341,22 @@
       </div>
     </div>
 
+    <div class="section-title">Receta</div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Laboratorio</label>
+        <textarea id="f-receta-lab" placeholder="Estudios de laboratorio solicitados, análisis de sangre, cultivos..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Medicamentos</label>
+        <textarea id="f-receta-med" placeholder="Medicamentos recetados, dosis, vía de administración, duración..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Estudios de Imagen</label>
+        <textarea id="f-receta-img" placeholder="Radiografías, ultrasonidos, tomografías, resonancias solicitadas..."></textarea>
+      </div>
+    </div>
+
     <div class="section-title">Cobro</div>
     <div class="form-grid">
       <div class="field">
@@ -446,11 +462,15 @@
       laboratorios: document.getElementById('f-laboratorios').value.trim(),
       imagen:       document.getElementById('f-imagen').value.trim(),
       notas:        document.getElementById('f-notas').value.trim(),
+      recetaLab:    document.getElementById('f-receta-lab').value.trim(),
+      recetaMed:    document.getElementById('f-receta-med').value.trim(),
+      recetaImg:    document.getElementById('f-receta-img').value.trim(),
     };
     registros.push(r);
     save();
     ['f-paciente','f-edad','f-medico','f-precio','f-app','f-apnp',
-     'f-motivo','f-diagnostico','f-tratamiento','f-exploracion','f-laboratorios','f-imagen','f-notas'].forEach(id =>
+     'f-motivo','f-diagnostico','f-tratamiento','f-exploracion','f-laboratorios','f-imagen','f-notas',
+     'f-receta-lab','f-receta-med','f-receta-img'].forEach(id =>
       document.getElementById(id).value = ''
     );
     document.getElementById('f-genero').value = '';
@@ -587,6 +607,14 @@
             ${field('Notas adicionales', r.notas, true)}
           </div>
         </div>
+        <div class="detalle-section">
+          <div class="detalle-section-title">Receta</div>
+          <div class="detalle-grid">
+            ${field('Laboratorio', r.recetaLab, true)}
+            ${field('Medicamentos', r.recetaMed, true)}
+            ${field('Estudios de Imagen', r.recetaImg, true)}
+          </div>
+        </div>
       </div>`;
 
     showTab('detalle', tabBtn);
@@ -601,8 +629,8 @@
 
   function exportCSV() {
     if (!registros.length) { alert('No hay registros para exportar.'); return; }
-    const cols   = ['id','fecha','paciente','edad','genero','medico','referido','precio','app','apnp','motivo','diagnostico','tratamiento','exploracion','laboratorios','imagen','notas'];
-    const labels = ['ID','Fecha','Paciente','Edad','Género','Médico','Cómo nos conocieron','Precio','APP','APNP','Motivo','Diagnóstico','Tratamiento','Exploración Física','Laboratorios','Estudios de Imagen','Notas'];
+    const cols   = ['id','fecha','paciente','edad','genero','medico','referido','precio','app','apnp','motivo','diagnostico','tratamiento','exploracion','laboratorios','imagen','notas','recetaLab','recetaMed','recetaImg'];
+    const labels = ['ID','Fecha','Paciente','Edad','Género','Médico','Cómo nos conocieron','Precio','APP','APNP','Motivo','Diagnóstico','Tratamiento','Exploración Física','Laboratorios','Estudios de Imagen','Notas','Receta — Laboratorio','Receta — Medicamentos','Receta — Estudios de Imagen'];
     const rows   = registros.map(r => cols.map(c => `"${(r[c]||'').toString().replace(/"/g,'""')}"`).join(','));
     const csv    = [labels.join(','), ...rows].join('\n');
     const blob   = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
