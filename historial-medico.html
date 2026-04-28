@@ -295,13 +295,6 @@
         <label>¿Cómo nos conocieron?</label>
         <input type="text" id="f-referido" placeholder="Ej: Recomendación, redes sociales...">
       </div>
-      <div class="field">
-        <label>Precio cobrado</label>
-        <div class="precio-wrap">
-          <span class="precio-prefix">$</span>
-          <input type="number" id="f-precio" placeholder="0.00" min="0" step="0.01">
-        </div>
-      </div>
     </div>
 
     <div class="section-title">Antecedentes</div>
@@ -331,8 +324,31 @@
         <textarea id="f-tratamiento" placeholder="Medicamentos recetados, dosis, indicaciones..."></textarea>
       </div>
       <div class="field full">
+        <label>Exploración Física</label>
+        <textarea id="f-exploracion" placeholder="Hallazgos de la exploración física..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Laboratorios</label>
+        <textarea id="f-laboratorios" placeholder="Resultados o solicitudes de laboratorio..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Estudios de Imagen</label>
+        <textarea id="f-imagen" placeholder="Radiografías, ultrasonidos, tomografías..."></textarea>
+      </div>
+      <div class="field full">
         <label>Notas adicionales</label>
         <textarea id="f-notas" placeholder="Observaciones, indicaciones de seguimiento..."></textarea>
+      </div>
+    </div>
+
+    <div class="section-title">Cobro</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Precio cobrado</label>
+        <div class="precio-wrap">
+          <span class="precio-prefix">$</span>
+          <input type="number" id="f-precio" placeholder="0.00" min="0" step="10">
+        </div>
       </div>
     </div>
 
@@ -424,14 +440,17 @@
       app:        document.getElementById('f-app').value.trim(),
       apnp:       document.getElementById('f-apnp').value.trim(),
       motivo,
-      diagnostico: document.getElementById('f-diagnostico').value.trim(),
-      tratamiento: document.getElementById('f-tratamiento').value.trim(),
-      notas:       document.getElementById('f-notas').value.trim(),
+      diagnostico:  document.getElementById('f-diagnostico').value.trim(),
+      tratamiento:  document.getElementById('f-tratamiento').value.trim(),
+      exploracion:  document.getElementById('f-exploracion').value.trim(),
+      laboratorios: document.getElementById('f-laboratorios').value.trim(),
+      imagen:       document.getElementById('f-imagen').value.trim(),
+      notas:        document.getElementById('f-notas').value.trim(),
     };
     registros.push(r);
     save();
     ['f-paciente','f-edad','f-medico','f-precio','f-app','f-apnp',
-     'f-motivo','f-diagnostico','f-tratamiento','f-notas'].forEach(id =>
+     'f-motivo','f-diagnostico','f-tratamiento','f-exploracion','f-laboratorios','f-imagen','f-notas'].forEach(id =>
       document.getElementById(id).value = ''
     );
     document.getElementById('f-genero').value = '';
@@ -562,6 +581,9 @@
             ${field('Motivo de Consulta', r.motivo, true)}
             ${field('Diagnóstico', r.diagnostico, true)}
             ${field('Tratamiento / Medicamentos', r.tratamiento, true)}
+            ${field('Exploración Física', r.exploracion, true)}
+            ${field('Laboratorios', r.laboratorios, true)}
+            ${field('Estudios de Imagen', r.imagen, true)}
             ${field('Notas adicionales', r.notas, true)}
           </div>
         </div>
@@ -579,8 +601,8 @@
 
   function exportCSV() {
     if (!registros.length) { alert('No hay registros para exportar.'); return; }
-    const cols   = ['id','fecha','paciente','edad','genero','medico','referido','precio','app','apnp','motivo','diagnostico','tratamiento','notas'];
-    const labels = ['ID','Fecha','Paciente','Edad','Género','Médico','Cómo nos conocieron','Precio','APP','APNP','Motivo','Diagnóstico','Tratamiento','Notas'];
+    const cols   = ['id','fecha','paciente','edad','genero','medico','referido','precio','app','apnp','motivo','diagnostico','tratamiento','exploracion','laboratorios','imagen','notas'];
+    const labels = ['ID','Fecha','Paciente','Edad','Género','Médico','Cómo nos conocieron','Precio','APP','APNP','Motivo','Diagnóstico','Tratamiento','Exploración Física','Laboratorios','Estudios de Imagen','Notas'];
     const rows   = registros.map(r => cols.map(c => `"${(r[c]||'').toString().replace(/"/g,'""')}"`).join(','));
     const csv    = [labels.join(','), ...rows].join('\n');
     const blob   = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
