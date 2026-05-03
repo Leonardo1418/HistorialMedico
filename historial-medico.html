@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Historial Médico</title>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap');
 
@@ -369,6 +371,7 @@
     </div>
 
     <button class="btn-primary" onclick="guardarRegistro()">Guardar Consulta</button>
+    <button class="btn-primary btn-export-receta" onclick="guardarYExportar()" style="background:var(--accent-light);margin-left:10px;">Guardar y Exportar Receta</button>
     <div class="success-msg" id="success-msg">✓ Consulta registrada correctamente.</div>
   </div>
 </div>
@@ -408,11 +411,15 @@
 <div id="tab-detalle" class="content hidden">
   <button class="back-btn" onclick="volverHistorial()">← Volver al historial</button>
   <div class="detalle-card" id="detalle-card"></div>
+  <div style="margin-top:20px;">
+    <button class="btn-primary btn-export-receta" id="btn-exportar-detalle" onclick="exportarRecetaDetalle()" style="background:var(--accent-light);">⬇ Exportar Receta</button>
+  </div>
 </div>
 
 <script>
   let registros = JSON.parse(localStorage.getItem('historial_medico') || '[]');
   let sortCol = 'fecha', sortAsc = false;
+  let currentDetalleId = null;
 
   document.getElementById('f-fecha').value = new Date().toISOString().split('T')[0];
 
@@ -556,6 +563,7 @@
   function verDetalle(id) {
     const r = registros.find(x => x.id === id);
     if (!r) return;
+    currentDetalleId = id;
 
     const tabBtn = document.getElementById('tab-btn-detalle');
     const tabWrap = document.getElementById('tab-wrap-detalle');
@@ -645,6 +653,141 @@
     if (!f) return '—';
     const [y,m,d] = f.split('-');
     return `${d}/${m}/${y}`;
+  }
+
+  // ─── EXPORTAR RECETA ───────────────────────────────────────────────────────
+
+  async function generarRecetaDocx(r) {
+    const { Document, Packer, Paragraph, TextRun, AlignmentType, TabStopType,
+            TabStopPosition, PageBreak, BorderStyle } = docx;
+
+    // US Letter: 12240 x 15840 DXA. Media hoja = 7920 DXA alto.
+    // Margins: top 720 (0.5"), bottom 720, left 1080, right 1080
+    // Content width = 12240 - 2160 = 10080 DXA
+
+    const CONTENT_W = 10080;
+    const fechaFmt  = formatFecha(r.fecha);
+    const nombre    = r.paciente || 'Paciente';
+
+    // Divisor visual entre nombre y fecha (tab al extremo derecho)
+    function headerRow(label) {
+      return new Paragraph({
+        tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
+        spacing: { before: 0, after: 120 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '2d5016', space: 6 } },
+        children: [
+          new TextRun({ text: nombre, bold: true, size: 22, font: 'Arial' }),
+          new TextRun({ text: '\t', font: 'Arial' }),
+          new TextRun({ text: fechaFmt, size: 22, font: 'Arial', color: '555555' }),
+        ]
+      });
+    }
+
+    function recetaTitulo(titulo) {
+      return new Paragraph({
+        spacing: { before: 160, after: 80 },
+        children: [
+          new TextRun({ text: titulo, bold: true, size: 22, font: 'Arial', color: '2d5016',
+                        allCaps: true })
+        ]
+      });
+    }
+
+    function recetaCuerpo(texto) {
+      if (!texto) {
+        return [new Paragraph({
+          spacing: { before: 0, after: 60 },
+          children: [new TextRun({ text: 'Sin indicaciones registradas.', size: 20, font: 'Arial', italics: true, color: '888888' })]
+        })];
+      }
+      return texto.split('\n').filter(l => l.trim() !== '').map(linea =>
+        new Paragraph({
+          spacing: { before: 0, after: 60 },
+          children: [new TextRun({ text: linea, size: 20, font: 'Arial' })]
+        })
+      );
+    }
+
+    // Relleno invisible para ocupar la segunda mitad de la hoja (después de media carta ~20 líneas)
+    function paddingLines(n) {
+      return Array.from({ length: n }, () => new Paragraph({
+        spacing: { before: 0, after: 0 },
+        children: [new TextRun({ text: '', size: 20, font: 'Arial' })]
+      }));
+    }
+
+    function buildMedia(titulo, contenido, esUltima) {
+      const bloques = [
+        headerRow(),
+        new Paragraph({ spacing: { before: 40, after: 0 }, children: [] }),
+        recetaTitulo(titulo),
+        ...recetaCuerpo(contenido),
+        ...paddingLines(14),
+      ];
+      if (!esUltima) {
+        bloques.push(
+          new Paragraph({
+            children: [new PageBreak()]
+          })
+        );
+      }
+      return bloques;
+    }
+
+    // Solo incluir recetas que tengan contenido
+    const todasSecciones = [
+      { titulo: 'Laboratorio',          contenido: r.recetaLab || '' },
+      { titulo: 'Medicamentos',         contenido: r.recetaMed || '' },
+      { titulo: 'Estudios de Imagen',   contenido: r.recetaImg || '' },
+    ];
+    const secciones = todasSecciones.filter(s => s.contenido.trim() !== '');
+
+    const hayAlgo = secciones.length > 0;
+    if (!hayAlgo) {
+      alert('No hay datos en la sección de Receta para exportar.');
+      return null;
+    }
+
+    const children = [];
+    secciones.forEach((s, i) => {
+      children.push(...buildMedia(s.titulo, s.contenido, i === secciones.length - 1));
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 12240, height: 15840 },
+            margin: { top: 720, right: 1080, bottom: 720, left: 1080 }
+          }
+        },
+        children
+      }]
+    });
+
+    return Packer.toBlob(doc);
+  }
+
+  async function guardarYExportar() {
+    const paciente = document.getElementById('f-paciente').value.trim();
+    const fecha    = document.getElementById('f-fecha').value;
+    const motivo   = document.getElementById('f-motivo').value.trim();
+    if (!paciente || !fecha || !motivo) {
+      alert('Por favor completa los campos obligatorios: Paciente, Fecha y Motivo.');
+      return;
+    }
+    guardarRegistro();
+    // Tomar el registro recién guardado (el último)
+    const r = registros[registros.length - 1];
+    const blob = await generarRecetaDocx(r);
+    if (blob) saveAs(blob, `receta_${r.paciente.replace(/\s+/g,'_')}_${r.fecha}.docx`);
+  }
+
+  async function exportarRecetaDetalle() {
+    const r = registros.find(x => x.id === currentDetalleId);
+    if (!r) { alert('No se encontró el registro.'); return; }
+    const blob = await generarRecetaDocx(r);
+    if (blob) saveAs(blob, `receta_${r.paciente.replace(/\s+/g,'_')}_${r.fecha}.docx`);
   }
 </script>
 </body>
