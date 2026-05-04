@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historial Médico</title>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+
+<link rel="manifest" href="manifest.json">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f0e8;
+    --surface: #fffef9;
+    --border: #d4c9b0;
+    --accent: #2d5016;
+    --accent-light: #4a7c2a;
+    --accent-pale: #e8f0e0;
+    --danger: #8b2020;
+    --text: #1a1a14;
+    --muted: #6b6450;
+    --tag: #c8ddb8;
+  }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .header {
+    background: var(--accent);
+    color: #fff;
+    padding: 24px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid #1a3009;
+  }
+  .header-title { font-family: 'DM Serif Display', serif; font-size: 2rem; letter-spacing: -0.5px; }
+  .header-title span { font-style: italic; color: #a8d080; }
+  .header-sub { font-size: 0.7rem; opacity: 0.6; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+
+  .btn-export {
+    background: #a8d080; color: var(--accent); border: none;
+    padding: 10px 20px; font-family: 'DM Mono', monospace; font-size: 0.75rem;
+    font-weight: 500; letter-spacing: 1px; text-transform: uppercase;
+    cursor: pointer; border-radius: 2px; transition: all 0.2s;
+  }
+  .btn-export:hover { background: #c4e89a; transform: translateY(-1px); }
+
+  .tabs {
+    display: flex; background: var(--surface);
+    border-bottom: 2px solid var(--border); padding: 0 40px;
+  }
+  .tab {
+    padding: 14px 24px; font-size: 0.75rem; letter-spacing: 1.5px;
+    text-transform: uppercase; cursor: pointer; border: none; background: none;
+    font-family: 'DM Mono', monospace; color: var(--muted);
+    border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .content { padding: 32px 40px; max-width: 1100px; margin: 0 auto; }
+
+  .form-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 32px; margin-bottom: 28px;
+  }
+  .section-title {
+    font-family: 'DM Serif Display', serif; font-size: 1.1rem;
+    color: var(--accent); margin: 28px 0 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-grid .full { grid-column: 1 / -1; }
+
+  .field label {
+    display: block; font-size: 0.65rem; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 10px 14px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 2px;
+    font-family: 'DM Mono', monospace; font-size: 0.85rem;
+    color: var(--text); transition: border-color 0.2s; outline: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    border-color: var(--accent-light); background: #fff;
+  }
+  .field textarea { resize: vertical; min-height: 85px; }
+
+  .precio-wrap { position: relative; }
+  .precio-wrap input { padding-left: 28px; }
+  .precio-prefix {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 0.85rem; pointer-events: none;
+  }
+
+  .btn-primary {
+    background: var(--accent); color: #fff; border: none;
+    padding: 12px 28px; font-family: 'DM Mono', monospace; font-size: 0.8rem;
+    letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+    border-radius: 2px; transition: all 0.2s; margin-top: 8px;
+  }
+  .btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); }
+
+  .success-msg {
+    background: var(--accent-pale); border: 1px solid var(--tag); color: var(--accent);
+    padding: 10px 16px; font-size: 0.8rem; border-radius: 2px; margin-top: 12px; display: none;
+  }
+
+  .search-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .search-bar input {
+    padding: 10px 14px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 2px; font-family: 'DM Mono', monospace; font-size: 0.82rem;
+    color: var(--text); outline: none; flex: 1; min-width: 150px; transition: border-color 0.2s;
+  }
+  .search-bar input:focus { border-color: var(--accent-light); }
+  .btn-clear {
+    padding: 10px 16px; background: none; border: 1px solid var(--border);
+    font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--muted);
+    cursor: pointer; border-radius: 2px; transition: all 0.2s;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .btn-clear:hover { border-color: var(--danger); color: var(--danger); }
+
+  .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-pill {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 16px; font-size: 0.72rem; border-radius: 2px; letter-spacing: 0.5px;
+  }
+  .stat-pill strong { color: var(--accent); font-weight: 500; }
+
+  .table-wrap { overflow-x: auto; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 0.8rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; overflow: hidden;
+  }
+  thead { background: var(--accent); color: #fff; }
+  thead th {
+    padding: 12px 16px; text-align: left; font-size: 0.65rem;
+    letter-spacing: 2px; text-transform: uppercase; font-weight: 400;
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  thead th:hover { background: var(--accent-light); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--accent-pale); }
+  td { padding: 12px 16px; vertical-align: middle; }
+  td.patient { font-weight: 500; color: var(--accent); }
+  td.date { color: var(--muted); white-space: nowrap; }
+  td.precio-col { color: var(--accent-light); font-weight: 500; white-space: nowrap; }
+
+  .btn-ver {
+    background: var(--accent); color: #fff; border: none;
+    padding: 5px 14px; font-size: 0.65rem; letter-spacing: 1px;
+    cursor: pointer; font-family: 'DM Mono', monospace;
+    border-radius: 2px; transition: all 0.2s; text-transform: uppercase;
+  }
+  .btn-ver:hover { background: var(--accent-light); }
+  .btn-del {
+    background: none; border: 1px solid #d4b0b0; color: var(--danger);
+    padding: 5px 10px; font-size: 0.65rem; letter-spacing: 1px;
+    cursor: pointer; font-family: 'DM Mono', monospace;
+    border-radius: 2px; transition: all 0.2s;
+  }
+  .btn-del:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 16px; }
+  .empty-state p { font-size: 0.85rem; }
+
+  /* ── DETALLE ── */
+  .back-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.72rem; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--muted); cursor: pointer; background: none; border: none;
+    font-family: 'DM Mono', monospace; margin-bottom: 24px; padding: 0; transition: color 0.2s;
+  }
+  .back-btn:hover { color: var(--accent); }
+
+  .detalle-card { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .detalle-header { background: var(--accent); color: #fff; padding: 28px 36px; }
+  .detalle-header h2 { font-family: 'DM Serif Display', serif; font-size: 2rem; font-style: italic; margin-bottom: 6px; }
+  .detalle-header .meta { font-size: 0.72rem; opacity: 0.7; letter-spacing: 1px; }
+  .detalle-header .precio-badge {
+    display: inline-block; margin-top: 12px;
+    background: #a8d080; color: var(--accent);
+    padding: 5px 16px; border-radius: 2px; font-size: 0.82rem; font-weight: 500;
+  }
+
+  .detalle-body { padding: 32px 36px; }
+  .detalle-section { margin-bottom: 28px; }
+  .detalle-section:last-child { margin-bottom: 0; }
+  .detalle-section-title {
+    font-size: 0.62rem; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 16px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .detalle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .detalle-field .lbl { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+  .detalle-field .val { font-size: 0.88rem; color: var(--text); white-space: pre-wrap; line-height: 1.65; }
+  .detalle-field.full { grid-column: 1 / -1; }
+  .val-empty { color: var(--muted) !important; font-style: italic; }
+
+  .tab-closeable { display: flex; align-items: stretch; position: relative; }
+  .tab-closeable .tab { padding-right: 26px; }
+  .tab-x {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px; height: 16px;
+    background: none; border: none;
+    color: var(--muted);
+    font-size: 0.6rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.15s;
+    border-radius: 2px;
+    line-height: 1;
+  }
+  .tab-closeable:hover .tab-x { display: flex; }
+  .tab-x:hover { color: var(--danger); }
+  .hidden { display: none; }
+
+  @media (max-width: 640px) {
+    .header { padding: 16px 20px; }
+    .tabs { padding: 0 20px; }
+    .content { padding: 20px; }
+    .form-grid, .detalle-grid { grid-template-columns: 1fr; }
+    .form-grid .full, .detalle-field.full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">Historial <span>Médico</span></div>
+    <div class="header-sub">Sistema de registro clínico</div>
+  </div>
+  <button class="btn-export" onclick="exportCSV()">⬇ Exportar CSV</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" id="tab-btn-registro" onclick="showTab('registro',this)">+ Nueva Consulta</button>
+  <button class="tab" id="tab-btn-historial" onclick="showTab('historial',this)">Historial</button>
+  <div class="tab-closeable hidden" id="tab-wrap-detalle">
+    <button class="tab" id="tab-btn-detalle" onclick="showTab('detalle',this)">Consulta</button><button class="tab-x" onclick="cerrarDetalle()" title="Cerrar">&#x2715;</button>
+  </div>
+</div>
+
+<!-- ═══ REGISTRO ═══ -->
+<div id="tab-registro" class="content">
+  <div class="form-card">
+    <div class="section-title">Datos del Paciente</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Nombre del Paciente *</label>
+        <input type="text" id="f-paciente" placeholder="Ej: María García">
+      </div>
+      <div class="field">
+        <label>Fecha de Consulta *</label>
+        <input type="date" id="f-fecha">
+      </div>
+      <div class="field">
+        <label>Edad</label>
+        <input type="number" id="f-edad" placeholder="Años" min="0" max="120">
+      </div>
+      <div class="field">
+        <label>Género</label>
+        <select id="f-genero">
+          <option value="">— Seleccionar —</option>
+          <option>Femenino</option>
+          <option>Masculino</option>
+          <option>Otro</option>
+          <option>Prefiere no decir</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Médico / Especialista</label>
+        <input type="text" id="f-medico" placeholder="Nombre del médico">
+      </div>
+      <div class="field">
+        <label>¿Cómo nos conocieron?</label>
+        <input type="text" id="f-referido" placeholder="Ej: Recomendación, redes sociales...">
+      </div>
+    </div>
+
+    <div class="section-title">Antecedentes</div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>A.P.P. — Antecedentes Personales Patológicos</label>
+        <textarea id="f-app" placeholder="Enfermedades crónicas, cirugías previas, hospitalizaciones, alergias..."></textarea>
+      </div>
+      <div class="field full">
+        <label>A.P.N.P. — Antecedentes Personales No Patológicos</label>
+        <textarea id="f-apnp" placeholder="Hábitos, alimentación, actividad física, tabaquismo, alcohol, ocupación..."></textarea>
+      </div>
+    </div>
+
+    <div class="section-title">Consulta</div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Motivo de Consulta *</label>
+        <input type="text" id="f-motivo" placeholder="Ej: Dolor de cabeza, fiebre...">
+      </div>
+      <div class="field full">
+        <label>Diagnóstico</label>
+        <input type="text" id="f-diagnostico" placeholder="Diagnóstico o impresión clínica">
+      </div>
+      <div class="field full">
+        <label>Tratamiento / Medicamentos</label>
+        <textarea id="f-tratamiento" placeholder="Medicamentos recetados, dosis, indicaciones..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Exploración Física</label>
+        <textarea id="f-exploracion" placeholder="Hallazgos de la exploración física..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Laboratorios</label>
+        <textarea id="f-laboratorios" placeholder="Resultados o solicitudes de laboratorio..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Estudios de Imagen</label>
+        <textarea id="f-imagen" placeholder="Radiografías, ultrasonidos, tomografías..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Notas adicionales</label>
+        <textarea id="f-notas" placeholder="Observaciones, indicaciones de seguimiento..."></textarea>
+      </div>
+    </div>
+
+    <div class="section-title">Receta</div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Laboratorio</label>
+        <textarea id="f-receta-lab" placeholder="Estudios de laboratorio solicitados, análisis de sangre, cultivos..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Medicamentos</label>
+        <textarea id="f-receta-med" placeholder="Medicamentos recetados, dosis, vía de administración, duración..."></textarea>
+      </div>
+      <div class="field full">
+        <label>Estudios de Imagen</label>
+        <textarea id="f-receta-img" placeholder="Radiografías, ultrasonidos, tomografías, resonancias solicitadas..."></textarea>
+      </div>
+    </div>
+
+    <div class="section-title">Cobro</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Precio cobrado</label>
+        <div class="precio-wrap">
+          <span class="precio-prefix">$</span>
+          <input type="number" id="f-precio" placeholder="0.00" min="0" step="10">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="guardarRegistro()">Guardar Consulta</button>
+    <button class="btn-primary btn-export-receta" onclick="guardarYExportar()" style="background:var(--accent-light);margin-left:10px;">Guardar y Exportar Receta</button>
+    <div class="success-msg" id="success-msg">✓ Consulta registrada correctamente.</div>
+  </div>
+</div>
+
+<!-- ═══ HISTORIAL ═══ -->
+<div id="tab-historial" class="content hidden">
+  <div class="search-bar">
+    <input type="text" id="s-paciente" placeholder="Buscar paciente, motivo, diagnóstico..." oninput="filtrar()">
+    <input type="date" id="s-desde" oninput="filtrar()" title="Desde">
+    <input type="date" id="s-hasta" oninput="filtrar()" title="Hasta">
+    <button class="btn-clear" onclick="limpiarFiltros()">✕ Limpiar</button>
+  </div>
+  <div class="stats-row" id="stats-row"></div>
+  <div class="table-wrap">
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th onclick="sortBy('fecha')">Fecha ↕</th>
+          <th onclick="sortBy('paciente')">Paciente ↕</th>
+          <th>Motivo</th>
+          <th>Diagnóstico</th>
+          <th>Médico</th>
+          <th onclick="sortBy('precio')">Precio ↕</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty-state hidden" id="empty-state">
+      <div class="icon">🗒️</div>
+      <p>No hay registros que coincidan con los filtros.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DETALLE ═══ -->
+<div id="tab-detalle" class="content hidden">
+  <button class="back-btn" onclick="volverHistorial()">← Volver al historial</button>
+  <div class="detalle-card" id="detalle-card"></div>
+  <div style="margin-top:20px;">
+    <button class="btn-primary btn-export-receta" id="btn-exportar-detalle" onclick="exportarRecetaDetalle()" style="background:var(--accent-light);">⬇ Exportar Receta</button>
+  </div>
+</div>
+
+<script>
+  let registros = JSON.parse(localStorage.getItem('historial_medico') || '[]');
+  let sortCol = 'fecha', sortAsc = false;
+  let currentDetalleId = null;
+
+  document.getElementById('f-fecha').value = new Date().toISOString().split('T')[0];
+
+  function save() { localStorage.setItem('historial_medico', JSON.stringify(registros)); }
+
+  function showTab(tab, el) {
+    ['registro','historial','detalle'].forEach(t =>
+      document.getElementById('tab-' + t).classList.add('hidden')
+    );
+    document.getElementById('tab-' + tab).classList.remove('hidden');
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    if (tab === 'historial') renderTabla();
+  }
+
+  function cerrarDetalle() {
+    document.getElementById('tab-wrap-detalle').classList.add('hidden');
+    document.getElementById('tab-detalle').classList.add('hidden');
+    showTab('historial', document.getElementById('tab-btn-historial'));
+  }
+
+  function volverHistorial() {
+    showTab('historial', document.getElementById('tab-btn-historial'));
+  }
+
+  function guardarRegistro() {
+    const paciente = document.getElementById('f-paciente').value.trim();
+    const fecha    = document.getElementById('f-fecha').value;
+    const motivo   = document.getElementById('f-motivo').value.trim();
+    if (!paciente || !fecha || !motivo) {
+      alert('Por favor completa los campos obligatorios: Paciente, Fecha y Motivo.');
+      return;
+    }
+    const r = {
+      id: Date.now(), paciente, fecha,
+      edad:       document.getElementById('f-edad').value,
+      genero:     document.getElementById('f-genero').value,
+      medico:     document.getElementById('f-medico').value.trim(),
+      referido:   document.getElementById('f-referido').value,
+      precio:     document.getElementById('f-precio').value,
+      app:        document.getElementById('f-app').value.trim(),
+      apnp:       document.getElementById('f-apnp').value.trim(),
+      motivo,
+      diagnostico:  document.getElementById('f-diagnostico').value.trim(),
+      tratamiento:  document.getElementById('f-tratamiento').value.trim(),
+      exploracion:  document.getElementById('f-exploracion').value.trim(),
+      laboratorios: document.getElementById('f-laboratorios').value.trim(),
+      imagen:       document.getElementById('f-imagen').value.trim(),
+      notas:        document.getElementById('f-notas').value.trim(),
+      recetaLab:    document.getElementById('f-receta-lab').value.trim(),
+      recetaMed:    document.getElementById('f-receta-med').value.trim(),
+      recetaImg:    document.getElementById('f-receta-img').value.trim(),
+    };
+    registros.push(r);
+    save();
+    ['f-paciente','f-edad','f-medico','f-precio','f-app','f-apnp',
+     'f-motivo','f-diagnostico','f-tratamiento','f-exploracion','f-laboratorios','f-imagen','f-notas',
+     'f-receta-lab','f-receta-med','f-receta-img'].forEach(id =>
+      document.getElementById(id).value = ''
+    );
+    document.getElementById('f-genero').value = '';
+    document.getElementById('f-referido').value = '';
+    document.getElementById('f-fecha').value = new Date().toISOString().split('T')[0];
+    const msg = document.getElementById('success-msg');
+    msg.style.display = 'block';
+    setTimeout(() => msg.style.display = 'none', 3000);
+  }
+
+  function renderTabla() {
+    const q     = document.getElementById('s-paciente').value.toLowerCase();
+    const desde = document.getElementById('s-desde').value;
+    const hasta = document.getElementById('s-hasta').value;
+
+    let filtered = registros.filter(r => {
+      if (q && !r.paciente.toLowerCase().includes(q) &&
+          !(r.motivo||'').toLowerCase().includes(q) &&
+          !(r.diagnostico||'').toLowerCase().includes(q)) return false;
+      if (desde && r.fecha < desde) return false;
+      if (hasta && r.fecha > hasta) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      if (sortCol === 'precio') {
+        const va = parseFloat(a.precio) || 0, vb = parseFloat(b.precio) || 0;
+        return sortAsc ? va - vb : vb - va;
+      }
+      const va = a[sortCol] || '', vb = b[sortCol] || '';
+      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+
+    const pacientesUnicos = [...new Set(filtered.map(r => r.paciente))].length;
+    const totalIngresos   = filtered.reduce((s, r) => s + (parseFloat(r.precio) || 0), 0);
+    document.getElementById('stats-row').innerHTML = `
+      <div class="stat-pill">Consultas: <strong>${filtered.length}</strong></div>
+      <div class="stat-pill">Pacientes: <strong>${pacientesUnicos}</strong></div>
+      <div class="stat-pill">Ingresos filtrados: <strong>$${totalIngresos.toLocaleString('es-MX',{minimumFractionDigits:2})}</strong></div>
+      <div class="stat-pill">Total en sistema: <strong>${registros.length}</strong></div>
+    `;
+
+    const tbody = document.getElementById('tbody');
+    const empty = document.getElementById('empty-state');
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      document.getElementById('tabla').style.display = 'none';
+      return;
+    }
+    empty.classList.add('hidden');
+    document.getElementById('tabla').style.display = '';
+
+    tbody.innerHTML = filtered.map(r => `
+      <tr>
+        <td class="date">${formatFecha(r.fecha)}</td>
+        <td class="patient">${esc(r.paciente)}</td>
+        <td>${esc(r.motivo)}</td>
+        <td>${r.diagnostico ? esc(r.diagnostico) : '<span style="color:var(--muted)">—</span>'}</td>
+        <td>${r.medico ? esc(r.medico) : '<span style="color:var(--muted)">—</span>'}</td>
+        <td class="precio-col">${r.precio
+          ? '$' + parseFloat(r.precio).toLocaleString('es-MX',{minimumFractionDigits:2})
+          : '<span style="color:var(--muted);font-weight:normal">—</span>'}</td>
+        <td style="display:flex;gap:6px;align-items:center;white-space:nowrap">
+          <button class="btn-ver" onclick="verDetalle(${r.id})">Ver</button>
+          <button class="btn-del" onclick="eliminar(${r.id})">✕</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function filtrar() { renderTabla(); }
+  function limpiarFiltros() {
+    ['s-paciente','s-desde','s-hasta'].forEach(id => document.getElementById(id).value = '');
+    renderTabla();
+  }
+  function sortBy(col) {
+    sortAsc = sortCol === col ? !sortAsc : true;
+    sortCol = col;
+    renderTabla();
+  }
+
+  function verDetalle(id) {
+    const r = registros.find(x => x.id === id);
+    if (!r) return;
+    currentDetalleId = id;
+
+    const tabBtn = document.getElementById('tab-btn-detalle');
+    const tabWrap = document.getElementById('tab-wrap-detalle');
+    tabWrap.classList.remove('hidden');
+    tabBtn.textContent = r.paciente.split(' ')[0];
+
+    function field(lbl, val, full) {
+      return `<div class="detalle-field${full?' full':''}">
+        <div class="lbl">${lbl}</div>
+        <div class="val${val?'':' val-empty'}">${val ? esc(val) : 'No registrado'}</div>
+      </div>`;
+    }
+
+    document.getElementById('detalle-card').innerHTML = `
+      <div class="detalle-header">
+        <h2>${esc(r.paciente)}</h2>
+        <div class="meta">
+          ${formatFecha(r.fecha)}
+          ${r.edad   ? ' · ' + r.edad + ' años' : ''}
+          ${r.genero ? ' · ' + r.genero : ''}
+          ${r.medico ? ' · Dr. ' + esc(r.medico) : ''}
+        </div>
+        ${r.precio ? `<div class="precio-badge">$${parseFloat(r.precio).toLocaleString('es-MX',{minimumFractionDigits:2})} MXN</div>` : ''}
+      </div>
+      <div class="detalle-body">
+        <div class="detalle-section">
+          <div class="detalle-section-title">Datos generales</div>
+          <div class="detalle-grid">
+            ${field('Fecha', formatFecha(r.fecha))}
+            ${field('¿Cómo nos conocieron?', r.referido)}
+          </div>
+        </div>
+        <div class="detalle-section">
+          <div class="detalle-section-title">Antecedentes</div>
+          <div class="detalle-grid">
+            ${field('A.P.P. — Antecedentes Personales Patológicos', r.app, true)}
+            ${field('A.P.N.P. — Antecedentes Personales No Patológicos', r.apnp, true)}
+          </div>
+        </div>
+        <div class="detalle-section">
+          <div class="detalle-section-title">Consulta</div>
+          <div class="detalle-grid">
+            ${field('Motivo de Consulta', r.motivo, true)}
+            ${field('Diagnóstico', r.diagnostico, true)}
+            ${field('Tratamiento / Medicamentos', r.tratamiento, true)}
+            ${field('Exploración Física', r.exploracion, true)}
+            ${field('Laboratorios', r.laboratorios, true)}
+            ${field('Estudios de Imagen', r.imagen, true)}
+            ${field('Notas adicionales', r.notas, true)}
+          </div>
+        </div>
+        <div class="detalle-section">
+          <div class="detalle-section-title">Receta</div>
+          <div class="detalle-grid">
+            ${field('Laboratorio', r.recetaLab, true)}
+            ${field('Medicamentos', r.recetaMed, true)}
+            ${field('Estudios de Imagen', r.recetaImg, true)}
+          </div>
+        </div>
+      </div>`;
+
+    showTab('detalle', tabBtn);
+  }
+
+  function eliminar(id) {
+    if (!confirm('¿Eliminar este registro permanentemente?')) return;
+    registros = registros.filter(r => r.id !== id);
+    save();
+    renderTabla();
+  }
+
+  function exportCSV() {
+    if (!registros.length) { alert('No hay registros para exportar.'); return; }
+    const cols   = ['id','fecha','paciente','edad','genero','medico','referido','precio','app','apnp','motivo','diagnostico','tratamiento','exploracion','laboratorios','imagen','notas','recetaLab','recetaMed','recetaImg'];
+    const labels = ['ID','Fecha','Paciente','Edad','Género','Médico','Cómo nos conocieron','Precio','APP','APNP','Motivo','Diagnóstico','Tratamiento','Exploración Física','Laboratorios','Estudios de Imagen','Notas','Receta — Laboratorio','Receta — Medicamentos','Receta — Estudios de Imagen'];
+    const rows   = registros.map(r => cols.map(c => `"${(r[c]||'').toString().replace(/"/g,'""')}"`).join(','));
+    const csv    = [labels.join(','), ...rows].join('\n');
+    const blob   = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `historial_medico_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  }
+
+  function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function formatFecha(f) {
+    if (!f) return '—';
+    const [y,m,d] = f.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  // ─── EXPORTAR RECETA ───────────────────────────────────────────────────────
+
+  async function generarRecetaDocx(r) {
+    const { Document, Packer, Paragraph, TextRun, AlignmentType, TabStopType,
+            TabStopPosition, PageBreak, BorderStyle } = docx;
+
+    // US Letter: 12240 x 15840 DXA. Media hoja = 7920 DXA alto.
+    // Margins: top 720 (0.5"), bottom 720, left 1080, right 1080
+    // Content width = 12240 - 2160 = 10080 DXA
+
+    const CONTENT_W = 10080;
+    const fechaFmt  = formatFecha(r.fecha);
+    const nombre    = r.paciente || 'Paciente';
+
+    // Divisor visual entre nombre y fecha (tab al extremo derecho)
+    function headerRow(label) {
+      return new Paragraph({
+        tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
+        spacing: { before: 0, after: 120 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '2d5016', space: 6 } },
+        children: [
+          new TextRun({ text: nombre, bold: true, size: 22, font: 'Arial' }),
+          new TextRun({ text: '\t', font: 'Arial' }),
+          new TextRun({ text: fechaFmt, size: 22, font: 'Arial', color: '555555' }),
+        ]
+      });
+    }
+
+    function recetaTitulo(titulo) {
+      return new Paragraph({
+        spacing: { before: 160, after: 80 },
+        children: [
+          new TextRun({ text: titulo, bold: true, size: 22, font: 'Arial', color: '2d5016',
+                        allCaps: true })
+        ]
+      });
+    }
+
+    function recetaCuerpo(texto) {
+      if (!texto) {
+        return [new Paragraph({
+          spacing: { before: 0, after: 60 },
+          children: [new TextRun({ text: 'Sin indicaciones registradas.', size: 20, font: 'Arial', italics: true, color: '888888' })]
+        })];
+      }
+      return texto.split('\n').filter(l => l.trim() !== '').map(linea =>
+        new Paragraph({
+          spacing: { before: 0, after: 60 },
+          children: [new TextRun({ text: linea, size: 20, font: 'Arial' })]
+        })
+      );
+    }
+
+    // Relleno invisible para ocupar la segunda mitad de la hoja (después de media carta ~20 líneas)
+    function paddingLines(n) {
+      return Array.from({ length: n }, () => new Paragraph({
+        spacing: { before: 0, after: 0 },
+        children: [new TextRun({ text: '', size: 20, font: 'Arial' })]
+      }));
+    }
+
+    function buildMedia(titulo, contenido, esUltima) {
+      const bloques = [
+        headerRow(),
+        new Paragraph({ spacing: { before: 40, after: 0 }, children: [] }),
+        recetaTitulo(titulo),
+        ...recetaCuerpo(contenido),
+        ...paddingLines(14),
+      ];
+      if (!esUltima) {
+        bloques.push(
+          new Paragraph({
+            children: [new PageBreak()]
+          })
+        );
+      }
+      return bloques;
+    }
+
+    // Solo incluir recetas que tengan contenido
+    const todasSecciones = [
+      { titulo: 'Laboratorio',          contenido: r.recetaLab || '' },
+      { titulo: 'Medicamentos',         contenido: r.recetaMed || '' },
+      { titulo: 'Estudios de Imagen',   contenido: r.recetaImg || '' },
+    ];
+    const secciones = todasSecciones.filter(s => s.contenido.trim() !== '');
+
+    const hayAlgo = secciones.length > 0;
+    if (!hayAlgo) {
+      alert('No hay datos en la sección de Receta para exportar.');
+      return null;
+    }
+
+    const children = [];
+    secciones.forEach((s, i) => {
+      children.push(...buildMedia(s.titulo, s.contenido, i === secciones.length - 1));
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 12240, height: 15840 },
+            margin: { top: 720, right: 1080, bottom: 720, left: 1080 }
+          }
+        },
+        children
+      }]
+    });
+
+    return Packer.toBlob(doc);
+  }
+
+  async function guardarYExportar() {
+    const paciente = document.getElementById('f-paciente').value.trim();
+    const fecha    = document.getElementById('f-fecha').value;
+    const motivo   = document.getElementById('f-motivo').value.trim();
+    if (!paciente || !fecha || !motivo) {
+      alert('Por favor completa los campos obligatorios: Paciente, Fecha y Motivo.');
+      return;
+    }
+    guardarRegistro();
+    // Tomar el registro recién guardado (el último)
+    const r = registros[registros.length - 1];
+    const blob = await generarRecetaDocx(r);
+    if (blob) saveAs(blob, `receta_${r.paciente.replace(/\s+/g,'_')}_${r.fecha}.docx`);
+  }
+
+  async function exportarRecetaDetalle() {
+    const r = registros.find(x => x.id === currentDetalleId);
+    if (!r) { alert('No se encontró el registro.'); return; }
+    const blob = await generarRecetaDocx(r);
+    if (blob) saveAs(blob, `receta_${r.paciente.replace(/\s+/g,'_')}_${r.fecha}.docx`);
+  }
+</script>
+</body>
+</html>
